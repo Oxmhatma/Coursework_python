@@ -3,6 +3,7 @@ import re
 import csv
 import json
 import psutil
+import logging
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from datetime import datetime
@@ -11,24 +12,58 @@ import matplotlib.pyplot as plt
 
 
 # ==========================================================
-# ADVANCED THREAT HUNTING & FORENSIC ANALYSIS TOOLKIT
+# Threat Hunting and Forensic Analysis Toolkit
 # ==========================================================
 
-class AdvancedThreatToolkit:
+class ThreatHuntingToolkit:
 
     def __init__(self):
-        self.ioc_file = "iocs.txt"
-        self.bruteforce_threshold = 3
+        self.load_config()
+        self.setup_logging()
 
     # ------------------------------------------------------
-    # Load IOCs
+    # Load Configuration
     # ------------------------------------------------------
-    def load_iocs(self):
+    def load_config(self):
         try:
-            with open(self.ioc_file, "r") as file:
-                return [line.strip().lower() for line in file if line.strip()]
-        except FileNotFoundError:
-            return []
+            with open("config.json") as f:
+                config = json.load(f)
+
+            self.severity_scores = config["severity_scores"]
+            self.bruteforce_threshold = config["bruteforce_threshold"]
+            self.suspicious_processes = config["suspicious_processes"]
+
+        except Exception as e:
+            raise Exception(f"Config file error: {e}")
+
+    # ------------------------------------------------------
+    # Setup Logging
+    # ------------------------------------------------------
+    def setup_logging(self):
+        logging.basicConfig(
+            filename="toolkit.log",
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(message)s"
+        )
+
+    # ------------------------------------------------------
+    # Create Reports Folder
+    # ------------------------------------------------------
+    def create_report_directory(self):
+        today = datetime.now().strftime("%Y-%m-%d")
+        report_dir = os.path.join("reports", today)
+        os.makedirs(report_dir, exist_ok=True)
+        return report_dir
+
+    # ------------------------------------------------------
+    # Load Threat Intelligence
+    # ------------------------------------------------------
+    def load_threat_intel(self):
+        try:
+            with open("threat_intel.json") as f:
+                return json.load(f)
+        except Exception as e:
+            raise Exception(f"Threat intelligence file error: {e}")
 
     # ------------------------------------------------------
     # Parse Logs
@@ -37,23 +72,25 @@ class AdvancedThreatToolkit:
         events = []
         pattern = r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (.+)"
 
-        with open(file_path, "r") as file:
+        with open(file_path) as file:
             for line in file:
                 match = re.match(pattern, line.strip())
                 if match:
                     timestamp = datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S")
-                    message = match.group(2)
+                    message = match.group(2).lower()
                     events.append({
                         "timestamp": timestamp,
-                        "message": message.lower()
+                        "message": message
                     })
+
+        logging.info(f"Parsed {len(events)} events.")
         return events
 
     # ------------------------------------------------------
-    # Severity Scoring
+    # Assign Severity
     # ------------------------------------------------------
     def assign_severity(self, message):
-        if "malware" in message or "unauthorized access" in message:
+        if "malware" in message or "unauthorized" in message:
             return "Critical"
         elif "failed login" in message:
             return "High"
@@ -63,70 +100,53 @@ class AdvancedThreatToolkit:
             return "Low"
 
     # ------------------------------------------------------
-    # Threat Classification
+    # Detect Threats
     # ------------------------------------------------------
-    def classify_threat(self, message):
-        if "failed login" in message:
-            return "Brute Force Attack"
-        elif "malware" in message:
-            return "Malware Execution"
-        elif "scan" in message:
-            return "Reconnaissance"
-        elif "unauthorized" in message:
-            return "Privilege Escalation"
-        else:
-            return "Normal Activity"
-
-    # ------------------------------------------------------
-    # IOC Detection
-    # ------------------------------------------------------
-    def detect_iocs(self, events, iocs):
+    def detect_threats(self, events):
+        intel = self.load_threat_intel()
         detections = []
 
         for event in events:
-            for ioc in iocs:
-                if ioc in event["message"]:
-                    severity = self.assign_severity(event["message"])
-                    threat_type = self.classify_threat(event["message"])
+            msg = event["message"]
 
-                    detections.append({
-                        "timestamp": event["timestamp"],
-                        "ioc": ioc,
-                        "message": event["message"],
-                        "severity": severity,
-                        "threat_type": threat_type
-                    })
+            for ip in intel.get("malicious_ips", []):
+                if ip in msg:
+                    detections.append(self.create_detection(event, ip))
+
+            for malware in intel.get("malware_names", []):
+                if malware in msg:
+                    detections.append(self.create_detection(event, malware))
+
+        logging.info(f"Detected {len(detections)} threats.")
         return detections
+
+    def create_detection(self, event, indicator):
+        severity = self.assign_severity(event["message"])
+        return {
+            "timestamp": event["timestamp"],
+            "indicator": indicator,
+            "message": event["message"],
+            "severity": severity,
+            "risk_score": self.severity_scores.get(severity, 0)
+        }
 
     # ------------------------------------------------------
     # Brute Force Detection
     # ------------------------------------------------------
     def detect_bruteforce(self, events):
-        failed_logins = [e for e in events if "failed login" in e["message"]]
-        if len(failed_logins) >= self.bruteforce_threshold:
-            return True, len(failed_logins)
-        return False, len(failed_logins)
+        failed = [e for e in events if "failed login" in e["message"]]
+        return len(failed) >= self.bruteforce_threshold, len(failed)
 
     # ------------------------------------------------------
-    # Anomaly Detection (Simple)
-    # ------------------------------------------------------
-    def detect_anomalies(self, events):
-        late_night_events = [
-            e for e in events if e["timestamp"].hour < 5
-        ]
-        return late_night_events
-
-    # ------------------------------------------------------
-    # Process Scanner
+    # Process Scan
     # ------------------------------------------------------
     def scan_processes(self):
-        suspicious_keywords = ["powershell", "cmd.exe", "nmap", "nc.exe"]
         suspicious = []
 
         for proc in psutil.process_iter(['pid', 'name']):
             try:
                 name = proc.info['name'].lower()
-                for keyword in suspicious_keywords:
+                for keyword in self.suspicious_processes:
                     if keyword in name:
                         suspicious.append(proc.info)
             except:
@@ -135,115 +155,106 @@ class AdvancedThreatToolkit:
         return suspicious
 
     # ------------------------------------------------------
-    # Timeline
+    # Calculate Risk Score
     # ------------------------------------------------------
-    def build_timeline(self, events):
-        return sorted(events, key=lambda x: x["timestamp"])
+    def calculate_risk_score(self, detections):
+        return sum(d["risk_score"] for d in detections)
 
     # ------------------------------------------------------
-    # CSV Report
+    # Save Reports
     # ------------------------------------------------------
-    def generate_csv_report(self, timeline, detections, processes):
-        filename = f"forensic_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    def save_reports(self, detections):
 
-        with open(filename, "w", newline="") as file:
-            writer = csv.writer(file)
+        report_dir = self.create_report_directory()
+        timestamp = datetime.now().strftime("%H%M%S")
 
-            writer.writerow(["Timestamp", "Message"])
-            for event in timeline:
-                writer.writerow([event["timestamp"], event["message"]])
+        csv_path = os.path.join(report_dir, f"report_{timestamp}.csv")
+        json_path = os.path.join(report_dir, f"report_{timestamp}.json")
+        graph_path = os.path.join(report_dir, f"severity_{timestamp}.png")
 
-            writer.writerow([])
-            writer.writerow(["IOC", "Threat Type", "Severity"])
+        # CSV
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Indicator", "Severity", "Risk Score"])
             for d in detections:
-                writer.writerow([d["ioc"], d["threat_type"], d["severity"]])
+                writer.writerow([d["indicator"], d["severity"], d["risk_score"]])
 
-            writer.writerow([])
-            writer.writerow(["Suspicious Processes"])
-            for p in processes:
-                writer.writerow([p["pid"], p["name"]])
+        # JSON
+        with open(json_path, "w") as f:
+            json.dump(detections, f, default=str, indent=4)
 
-        return filename
+        # Graph
+        if detections:
+            severity_counts = Counter([d["severity"] for d in detections])
+            plt.figure()
+            plt.bar(severity_counts.keys(), severity_counts.values())
+            plt.title("Threat Severity Distribution")
+            plt.savefig(graph_path)
+            plt.close()
+        else:
+            graph_path = "No threats detected"
 
-    # ------------------------------------------------------
-    # JSON Report
-    # ------------------------------------------------------
-    def generate_json_report(self, detections):
-        filename = f"forensic_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(filename, "w") as file:
-            json.dump(detections, file, default=str, indent=4)
-        return filename
-
-    # ------------------------------------------------------
-    # Graph Visualization
-    # ------------------------------------------------------
-    def generate_graph(self, detections):
-        severity_counts = Counter([d["severity"] for d in detections])
-
-        plt.figure()
-        plt.bar(severity_counts.keys(), severity_counts.values())
-        plt.title("Threat Severity Distribution")
-        plt.xlabel("Severity Level")
-        plt.ylabel("Count")
-        plt.show()
+        logging.info("Reports saved.")
+        return csv_path, json_path, graph_path
 
     # ------------------------------------------------------
-    # Main Analysis Engine
+    # Main Engine
     # ------------------------------------------------------
     def run_analysis(self, log_file):
+
         events = self.parse_logs(log_file)
-        iocs = self.load_iocs()
-        detections = self.detect_iocs(events, iocs)
-        timeline = self.build_timeline(events)
+        detections = self.detect_threats(events)
         processes = self.scan_processes()
+        bruteforce_alert, failed_count = self.detect_bruteforce(events)
+        total_risk = self.calculate_risk_score(detections)
 
-        bruteforce_alert, count = self.detect_bruteforce(events)
-        anomalies = self.detect_anomalies(events)
-
-        csv_report = self.generate_csv_report(timeline, detections, processes)
-        json_report = self.generate_json_report(detections)
+        csv_path, json_path, graph_path = self.save_reports(detections)
 
         return {
-            "total_events": len(events),
+            "events": len(events),
             "detections": len(detections),
+            "risk_score": total_risk,
+            "failed_count": failed_count,
             "bruteforce": bruteforce_alert,
-            "failed_count": count,
-            "anomalies": len(anomalies),
-            "csv": csv_report,
-            "json": json_report,
-            "detections_data": detections
+            "csv": csv_path,
+            "json": json_path,
+            "graph": graph_path
         }
 
 
 # ==========================================================
-# GUI SECTION
+# GUI
 # ==========================================================
 
 class ToolkitGUI:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("Advanced Threat Hunting Toolkit")
+        self.root.title("Threat Hunting and Forensic Analysis Toolkit")
         self.root.geometry("700x500")
 
-        self.toolkit = AdvancedThreatToolkit()
+        self.toolkit = ThreatHuntingToolkit()
         self.log_file = None
 
         self.build_ui()
 
     def build_ui(self):
 
-        tk.Label(self.root, text="Advanced Threat Hunting & Forensic Toolkit",
-                 font=("Arial", 15, "bold")).pack(pady=15)
+        tk.Label(self.root,
+                 text="Threat Hunting and Forensic Analysis Toolkit",
+                 font=("Arial", 14, "bold")).pack(pady=15)
 
-        tk.Button(self.root, text="Select Log File",
-                  command=self.select_file, width=25).pack(pady=5)
+        tk.Button(self.root,
+                  text="Select Log File",
+                  command=self.select_file,
+                  width=25).pack(pady=5)
 
-        tk.Button(self.root, text="Run Analysis",
-                  command=self.run_analysis, width=25, bg="darkblue", fg="white").pack(pady=10)
-
-        tk.Button(self.root, text="Show Severity Graph",
-                  command=self.show_graph, width=25).pack(pady=5)
+        tk.Button(self.root,
+                  text="Run Analysis",
+                  command=self.run_analysis,
+                  width=25,
+                  bg="darkblue",
+                  fg="white").pack(pady=10)
 
         self.output = tk.Text(self.root, height=15, width=85)
         self.output.pack(pady=10)
@@ -254,28 +265,26 @@ class ToolkitGUI:
         )
 
     def run_analysis(self):
+
         if not self.log_file:
-            messagebox.showerror("Error", "Select log file first.")
+            messagebox.showerror("Error", "Please select a log file.")
             return
 
-        results = self.toolkit.run_analysis(self.log_file)
+        try:
+            results = self.toolkit.run_analysis(self.log_file)
 
-        self.output.delete(1.0, tk.END)
-        self.output.insert(tk.END, f"Total Events: {results['total_events']}\n")
-        self.output.insert(tk.END, f"Threat Detections: {results['detections']}\n")
-        self.output.insert(tk.END, f"Failed Login Count: {results['failed_count']}\n")
-        self.output.insert(tk.END, f"Brute Force Alert: {results['bruteforce']}\n")
-        self.output.insert(tk.END, f"Anomalies Detected: {results['anomalies']}\n\n")
-        self.output.insert(tk.END, f"CSV Report: {results['csv']}\n")
-        self.output.insert(tk.END, f"JSON Report: {results['json']}\n")
+            self.output.delete(1.0, tk.END)
+            self.output.insert(tk.END, f"Total Events: {results['events']}\n")
+            self.output.insert(tk.END, f"Threat Detections: {results['detections']}\n")
+            self.output.insert(tk.END, f"Total Risk Score: {results['risk_score']}\n")
+            self.output.insert(tk.END, f"Failed Login Attempts: {results['failed_count']}\n")
+            self.output.insert(tk.END, f"Brute Force Alert: {results['bruteforce']}\n\n")
+            self.output.insert(tk.END, f"CSV Report: {results['csv']}\n")
+            self.output.insert(tk.END, f"JSON Report: {results['json']}\n")
+            self.output.insert(tk.END, f"Graph: {results['graph']}\n")
 
-        self.detections_data = results["detections_data"]
-
-    def show_graph(self):
-        if hasattr(self, "detections_data"):
-            self.toolkit.generate_graph(self.detections_data)
-        else:
-            messagebox.showerror("Error", "Run analysis first.")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
 
 # ==========================================================

@@ -1,0 +1,15 @@
+{
+  "severity_scores": {
+    "Critical": 90,
+    "High": 70,
+    "Medium": 40,
+    "Low": 10
+  },
+  "bruteforce_threshold": 3,
+  "suspicious_processes": [
+    "powershell",
+    "cmd.exe",
+    "nmap",
+    "nc.exe"
+  ]
+}

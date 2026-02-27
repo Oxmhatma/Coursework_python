@@ -4,7 +4,6 @@
     "10.0.0.5"
   ],
   "malware_names": [
-    "malware.exe",
-    "ransomware.exe"
+    "malware.exe"
   ]
 }

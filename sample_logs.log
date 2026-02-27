@@ -1,7 +1,11 @@
-2025-06-12 10:15:32 INFO User login successful from 192.168.1.10
-2025-06-12 10:17:01 WARNING Failed login attempt from 192.168.1.100
-2025-06-12 10:17:05 WARNING Failed login attempt from 192.168.1.100
-2025-06-12 10:17:09 WARNING Failed login attempt from 192.168.1.100
-2025-06-12 10:18:22 ERROR Suspicious process detected: powershell.exe
-2025-06-12 10:19:10 INFO File executed: malware.exe
-2025-06-12 10:20:44 WARNING Connection attempt to 10.0.0.5
+2025-06-12 09:10:21 - User login successful from 192.168.1.10
+2025-06-12 09:12:33 - Failed login attempt from 192.168.1.100
+2025-06-12 09:12:40 - Failed login attempt from 192.168.1.100
+2025-06-12 09:12:48 - Failed login attempt from 192.168.1.100
+2025-06-12 09:15:02 - Unauthorized access attempt detected
+2025-06-12 09:17:11 - File executed: malware.exe
+2025-06-12 09:18:55 - Suspicious network scan detected
+2025-06-12 09:20:44 - Connection attempt to 10.0.0.5
+2025-06-12 09:22:01 - System process started: powershell.exe
+2025-06-12 09:25:13 - Failed login attempt from 192.168.1.100
+2025-06-12 09:30:45 - User login successful from 192.168.1.15
